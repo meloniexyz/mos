@@ -33,6 +33,8 @@
         @{ Id = 'svc-sync-host'; Tier = 'standard'; Type = 'Service'; Target = 'OneSyncSvc'; Value = 'Disabled'; Why = 'Mail/contacts/calendar sync.' }
         @{ Id = 'svc-net-usage'; Tier = 'standard'; Type = 'Service'; Target = 'Ndu'; Value = 'Disabled'; Why = 'Network data usage monitor driver counts every packet.' }
 
+        @{ Id = 'sac-off'; Tier = 'standard'; Type = 'Registry'; Target = 'HKLM:\SYSTEM\CurrentControlSet\Control\CI\Policy'; Name = 'VerifiedAndReputablePolicyState'; Value = 0; ValueType = 'DWord'; Why = 'Smart App Control off (it checks every program and script launch, and once On it would block MOS''s unsigned scripts). Driver signing and the rest of code integrity are untouched. Reboot needed. On Windows builds older than the 2026 servicing update, Windows may not let undo turn it back on.' }
+
         # policies: telemetry minimum, updates on your schedule, no peer-to-peer update sharing
         @{ Id = 'policy-telemetry-min'; Tier = 'standard'; Type = 'Registry'; Target = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection'; Name = 'AllowTelemetry'; Value = 0; ValueType = 'DWord'; Why = 'Lowest diagnostic data level Pro allows.' }
         @{ Id = 'policy-no-feedback'; Tier = 'standard'; Type = 'Registry'; Target = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection'; Name = 'DoNotShowFeedbackNotifications'; Value = 1; ValueType = 'DWord'; Why = 'No feedback pop-ups.' }

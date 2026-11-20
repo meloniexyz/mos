@@ -184,6 +184,29 @@ function Test-MosTweakSchema {
     return $null
 }
 
+# Exact (Key, Name) pairs that may be written even though a key pattern protects them.
+# Protected value names are checked before this and can never be unlocked.
+function Test-MosKeepListException {
+    param([hashtable]$Tweak, [hashtable]$KeepList)
+    foreach ($e in @($KeepList['RegistryExceptions'])) {
+        if (-not $e) { continue }
+        if ([string]::Equals([string]$e.Key, [string]$Tweak.Target, [StringComparison]::OrdinalIgnoreCase) -and
+            [string]::Equals([string]$e.Name, [string]$Tweak.Name, [StringComparison]::OrdinalIgnoreCase)) { return $true }
+    }
+    $false
+}
+
+function Assert-MosKeepListExceptions {
+    param([hashtable]$KeepList)
+    foreach ($e in @($KeepList['RegistryExceptions'])) {
+        if (-not $e) { continue }
+        if ($e -isnot [System.Collections.IDictionary] -or -not $e['Key'] -or -not $e['Name']) { throw "Keep-list exception must have Key and Name: $(ConvertTo-MosCanonical $e)" }
+        foreach ($part in [string]$e['Key'], [string]$e['Name']) {
+            if ($part.IndexOfAny([char[]]'*?[') -ge 0) { throw "Keep-list exception may not use wildcards: $($e['Key']) / $($e['Name'])" }
+        }
+    }
+}
+
 function Test-MosKeepList {
     param([hashtable]$Tweak, [hashtable]$KeepList)
     $services = @($KeepList.Services)
@@ -194,7 +217,11 @@ function Test-MosKeepList {
         { $_ -in 'Registry', 'PnpRegistry' } {
             if (@($KeepList.RegistryValueNames) -contains $Tweak.Name) { return "keep-list: registry value '$($Tweak.Name)' is protected" }
             if ($Tweak.Type -eq 'Registry') {
-                foreach ($p in @($KeepList.RegistryKeyPatterns)) { if ($Tweak.Target -like $p) { return "keep-list: registry key '$($Tweak.Target)' is protected ($p)" } }
+                foreach ($p in @($KeepList.RegistryKeyPatterns)) {
+                    if ($Tweak.Target -like $p -and -not (Test-MosKeepListException -Tweak $Tweak -KeepList $KeepList)) {
+                        return "keep-list: registry key '$($Tweak.Target)' is protected ($p)"
+                    }
+                }
                 if ($Tweak.Target -match '\\Services\\([^\\]+)' -and $services -contains $Matches[1]) { return "keep-list: service '$($Matches[1])' is protected (registry)" }
             }
         }
@@ -220,6 +247,7 @@ function Import-MosTweaks {
         [string]$KeepListPath = $script:Config.KeepListPath
     )
     $keep = Import-PowerShellDataFile -LiteralPath $KeepListPath
+    Assert-MosKeepListExceptions $keep   # a bad exception stops everything: nothing loads, nothing applies
     $tweaks = New-Object System.Collections.ArrayList
     $rejected = New-Object System.Collections.ArrayList
     $seen = @{}

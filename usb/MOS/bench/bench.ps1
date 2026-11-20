@@ -7,12 +7,15 @@
   .\bench.ps1 capture -Label baseline -Seconds 120     # start it, then play a deathmatch (needs admin)
   .\bench.ps1 summary -Label baseline                  # print the latest "baseline" summary
   .\bench.ps1 compare -Label baseline, spectre-off     # first label is the reference
+  .\bench.ps1 capture -Label irq-base -WithCounters    # also sample interrupt/DPC load every 5 s
 #>
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)][ValidateSet('capture', 'summary', 'compare')][string]$Command = 'summary',
     [string[]]$Label,
     [int]$Seconds = 120,
+    [switch]$WithCounters,
+    [int]$CounterInterval = 5,
     [int]$WaitTimeout = 300,
     [string]$ProcessName = 'VALORANT-Win64-Shipping',
     [string]$PresentMon,
@@ -38,6 +41,43 @@ function Wait-ForProcess([string]$Name, [int]$TimeoutSeconds, [int]$PollSeconds 
         Start-Sleep -Seconds $PollSeconds
     }
     $false
+}
+
+# Low-rate system counters in a separate process (Start-Job) so PresentMon's run isn't disturbed.
+function Start-CounterSampler([string]$OutCsv, [int]$Interval = 5) {
+    Start-Job -ArgumentList $OutCsv, $Interval -ScriptBlock {
+        param($out, $interval)
+        $inv = [Globalization.CultureInfo]::InvariantCulture
+        'time,intPct,dpcPct,busiestCore' | Set-Content -LiteralPath $out -Encoding ASCII
+        $ctr = '\Processor(_Total)\% Interrupt Time', '\Processor(_Total)\% DPC Time', '\Processor(*)\% Processor Time'
+        while ($true) {
+            $s = (Get-Counter $ctr -SampleInterval $interval -MaxSamples 1 -ErrorAction SilentlyContinue).CounterSamples
+            if (-not $s) { continue }
+            $int = ($s | Where-Object { $_.Path -like '*_total)\% interrupt time' }).CookedValue
+            $dpc = ($s | Where-Object { $_.Path -like '*_total)\% dpc time' }).CookedValue
+            $busy = ($s | Where-Object { $_.Path -like '*\% processor time' -and $_.InstanceName -ne '_total' } | Measure-Object CookedValue -Maximum).Maximum
+            ('{0},{1},{2},{3}' -f (Get-Date -Format 'HH:mm:ss'), ([double]$int).ToString('0.00', $inv), ([double]$dpc).ToString('0.00', $inv), ([double]$busy).ToString('0.00', $inv)) |
+                Add-Content -LiteralPath $out -Encoding ASCII
+        }
+    }
+}
+
+function Stop-CounterSampler($Job) {
+    if ($Job) { Stop-Job $Job -ErrorAction SilentlyContinue; Remove-Job $Job -Force -ErrorAction SilentlyContinue }
+}
+
+function Get-CounterStats([string]$CountersCsv) {
+    $rows = @(Import-Csv -LiteralPath $CountersCsv)
+    if (-not $rows.Count) { return $null }
+    $inv = [Globalization.CultureInfo]::InvariantCulture
+    $out = [ordered]@{}
+    foreach ($pair in @(@('intPct', 'IntPct'), @('dpcPct', 'DpcPct'), @('busiestCore', 'BusiestCore'))) {
+        $v = [double[]]@($rows | ForEach-Object { [double]::Parse($_.($pair[0]), $inv) } | Sort-Object)
+        $out["$($pair[1])Med"] = [math]::Round((Get-Percentile $v 0.5), 2)
+        $out["$($pair[1])P90"] = [math]::Round((Get-Percentile $v 0.9), 2)
+    }
+    $out['CounterSamples'] = $rows.Count
+    $out
 }
 
 function Get-FrameTimes([string]$CsvPath) {
@@ -85,6 +125,11 @@ function Save-Summary([string]$CsvPath, [string]$RunLabel) {
     $s | Add-Member Label $RunLabel
     $s | Add-Member Date (Get-Date -Format o)
     $s | Add-Member File (Split-Path $CsvPath -Leaf)
+    $countersCsv = [IO.Path]::ChangeExtension($CsvPath, '.counters.csv')
+    if (Test-Path -LiteralPath $countersCsv) {
+        $c = Get-CounterStats $countersCsv
+        if ($c) { foreach ($k in $c.Keys) { $s | Add-Member $k $c[$k] } }
+    }
     $out = [IO.Path]::ChangeExtension($CsvPath, '.summary.json')
     $s | ConvertTo-Json | Set-Content -LiteralPath $out -Encoding UTF8
     $s
@@ -99,18 +144,25 @@ function Compare-Bench([object[]]$Summaries, [string[]]$Labels, [double]$MinNois
     $baseRuns = @($Summaries | Where-Object { $_.Label -eq $base })
     if (-not $baseRuns.Count) { throw "No runs labelled '$base'." }
     $ref = $baseRuns[-1]
-    foreach ($m in 'AvgFps', 'Low1', 'Low01') {
-        $vals = @($baseRuns | ForEach-Object { [double]$_.$m })
+    # frame metrics: higher is better. counter metrics (only when both runs have them): lower is better.
+    $metrics = @(@('AvgFps', $true), @('Low1', $true), @('Low01', $true), @('IntPctMed', $false), @('DpcPctMed', $false))
+    foreach ($pair in $metrics) {
+        $m = $pair[0]; $higherBetter = $pair[1]
+        if (-not $ref.PSObject.Properties[$m]) { continue }
+        $vals = @($baseRuns | Where-Object { $_.PSObject.Properties[$m] } | ForEach-Object { [double]$_.$m })
         $mean = ($vals | Measure-Object -Average).Average
         $noise = if ($vals.Count -ge 2 -and $mean) { (($vals | Measure-Object -Maximum).Maximum - ($vals | Measure-Object -Minimum).Minimum) / $mean } else { 0 }
         $threshold = [math]::Max($noise, $MinNoise)
         foreach ($l in $Labels | Select-Object -Skip 1) {
             $run = @($Summaries | Where-Object { $_.Label -eq $l })
             if (-not $run.Count) { Write-Warning "No runs labelled '$l'."; continue }
+            if (-not $run[-1].PSObject.Properties[$m]) { continue }   # runs without counters: frame metrics only
             $v = [double]$run[-1].$m
-            $delta = ($v - [double]$ref.$m) / [double]$ref.$m
-            $verdict = if ([math]::Abs($delta) -le $threshold) { 'within noise' } elseif ($delta -gt 0) { 'gain' } else { 'loss' }
-            [pscustomobject]@{ Label = $l; Metric = $m; Reference = [double]$ref.$m; Value = $v; DeltaPct = [math]::Round($delta * 100, 1); NoisePct = [math]::Round($threshold * 100, 1); Verdict = $verdict }
+            $r = [double]$ref.$m
+            $delta = ($v - $r) / [math]::Max([math]::Abs($r), 0.05)   # floor avoids dividing by ~0 % interrupt time
+            $better = if ($higherBetter) { $delta } else { -$delta }
+            $verdict = if ([math]::Abs($delta) -le $threshold) { 'within noise' } elseif ($better -gt 0) { 'gain' } else { 'loss' }
+            [pscustomobject]@{ Label = $l; Metric = $m; Reference = $r; Value = $v; DeltaPct = [math]::Round($delta * 100, 1); NoisePct = [math]::Round($threshold * 100, 1); Verdict = $verdict }
         }
     }
 }
@@ -125,14 +177,17 @@ function Invoke-Bench {
             Write-Host "Waiting for $ProcessName (start a deathmatch)..."
             if (-not (Wait-ForProcess $ProcessName $WaitTimeout)) { throw "$ProcessName did not start within $WaitTimeout s." }
             Write-Host "Recording $Seconds s. Keep playing."
-            & $pm (New-PresentMonArgs $ProcessName $csv $Seconds) | Out-Null
+            $sampler = $null
+            if ($WithCounters) { $sampler = Start-CounterSampler ([IO.Path]::ChangeExtension($csv, '.counters.csv')) $CounterInterval }
+            try { & $pm (New-PresentMonArgs $ProcessName $csv $Seconds) | Out-Null }
+            finally { Stop-CounterSampler $sampler }
             if (-not (Test-Path -LiteralPath $csv)) { throw "PresentMon wrote no file (run as administrator?)." }
             Save-Summary $csv $Label[0] | Format-List
         }
         'summary' {
             $all = Get-Summaries $ResultsDir
             if ($Label) { $all = @($all | Where-Object { $Label -contains $_.Label }) }
-            $all | Select-Object Label, Date, Frames, AvgFps, Low1, Low01, P99Ms, StdevMs | Format-Table -AutoSize
+            $all | Select-Object Label, Date, Frames, AvgFps, Low1, Low01, P99Ms, StdevMs, IntPctMed, DpcPctMed, BusiestCoreMed | Format-Table -AutoSize
         }
         'compare' {
             if (-not $Label -or $Label.Count -lt 2) { throw 'compare needs at least two labels: reference first.' }

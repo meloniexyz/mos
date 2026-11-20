@@ -102,13 +102,10 @@ Then rename the new entry: `bcdedit /set {current} description "MOS"`.
    - In the client, choose **Install VALORANT** and set the location to `C:\Riot Games`.
    - It finds the copied files and only verifies them.
    - Vanguard installs too. **Restart** when asked.
-5. **Launch VALORANT once** so it creates its settings files. In Video > Graphics Quality, set:
-   - **Multithreaded Rendering: On**
-   - **NVIDIA Reflex: On + Boost**
-   - **Vignette, Improve Clarity, Experimental Sharpening, Bloom, Distortion, Cast Shadows: Off**
-
-   Then close the game.
-6. **Apply again** to set the low-graphics profile and Riot Client autostart. In an admin terminal:
+5. **Launch VALORANT once** so it creates its settings files.
+   - Most in-game settings sync through your Riot account, so whatever you set on another PC appears here too. See "Game and driver settings" below.
+   - Check Video > Graphics Quality once (see "Game and driver settings"), then close the game.
+6. **Apply again**: this sets the per-PC graphics quality file, Riot Client autostart, and the fullscreen-optimizations experiment if you use it. In an admin terminal:
 
    ```powershell
    C:\MOS\tune\tune.ps1 apply
@@ -119,6 +116,35 @@ Then rename the new entry: `bcdedit /set {current} description "MOS"`.
    ```powershell
    C:\MOS\vanguard-check.ps1
    ```
+8. **Restart once more.** Smart App Control's off switch (`sac-off`) takes effect after a reboot.
+
+### Game and driver settings
+
+These live outside Windows, so the tuner doesn't set them.
+
+**Where VALORANT keeps its settings:**
+- **Synced through your Riot account** (`RiotUserSettings.ini`): Reflex, bloom, distortion, cast shadows, vignette, sharpening, texture/detail/material quality, frame cap, blood/corpses and more. Set them once on any PC and MOS gets them at login.
+- **Per PC** (`GameUserSettings.ini`): the graphics quality groups. MOS's `valorant-low-graphics` tweak sets these to lowest.
+
+**Recommended in-game values for a CPU-bound PC:**
+
+| Setting | Value | Why |
+|---|---|---|
+| Multithreaded Rendering | On | spreads render work off the main thread |
+| NVIDIA Reflex | On + Boost | lowest latency, keeps GPU clocks up |
+| Material / Texture / Detail / UI quality | Low | |
+| Vignette, Improve Clarity, Sharpening, Bloom, Distortion, Cast Shadows | Off | |
+| Show Blood, Show Corpses | Off | fewer objects to draw in fights |
+| Anisotropic filtering | 1x | |
+| Raw Input Buffer (Settings > General > Mouse) | Off with a 1000 Hz mouse; try On with 2000–8000 Hz | it only helps high-polling mice and can cost fps otherwise |
+
+**NVIDIA Control Panel > Manage 3D settings:**
+- **Shader Cache Size:** 10 GB or Unlimited (fewer re-compiles after driver or game updates).
+- **Power management mode:** Prefer maximum performance.
+- **Texture filtering quality:** High performance.
+- **Low Latency Mode:** leave it; Reflex in the game takes over.
+
+**Frame cap test:** with Reflex On + Boost, compare **no cap** against **a cap slightly above your usual deathmatch fps**. Use the bench (step 8) and keep whichever gives better 1% lows. A steady cap often feels smoother than a higher, swinging average.
 
 ## 6. One-click switch from Windows 10
 
@@ -163,15 +189,36 @@ The metrics:
 - **1% low** is the fps of the average of the slowest 1% of frames; **0.1% low** is the same for the slowest 0.1%. They show stutter, which the average hides.
 - The comparison marks each difference as `gain`, `loss` or `within noise`.
 
+**System counters (optional):** add `-WithCounters` to also record interrupt %, DPC % and the busiest core every 5 seconds. `compare` then shows those too, where lower is better.
+- Use it for the interrupt experiment (`exp-gpu-irq-*`).
+- Only compare runs that were recorded the same way: all with counters or all without.
+
 ## 9. Experimental tweaks (one at a time)
 
-For each group (`exp-spectre-*`, `exp-hags-off`, `exp-timer-*`, `exp-defender-quiet`):
+Test the groups in this order. The first ones are the most likely to matter:
+
+| Order | Group | What it changes |
+|---|---|---|
+| 1 | `exp-defender-quiet` | Defender skips the Riot folders and scans only when idle (Defender was the largest Windows background load measured at idle) |
+| 2 | `exp-spectre-*` | Spectre/Meltdown kernel mitigations off |
+| 3 | `exp-hags-off` | GPU scheduling back to the driver |
+| 4 | `exp-mpo-off` | multiplane overlay off |
+| 5 | `exp-gpu-irq-*` | GPU interrupts on CPU 2 instead of CPU 0 (bench with `-WithCounters`) |
+| 6 | `exp-timer-*` | 0.5 ms timer resolution |
+| 7 | `exp-priority-separation` | stronger foreground scheduling boost |
+| 8 | `exp-fso-off` | fullscreen optimizations off for VALORANT |
+
+For each group:
 
 1. `C:\MOS\tune\tune.ps1 apply -Id exp-spectre-*`
 2. **Restart.**
 3. `bench.ps1 capture -Label spectre-off`, then `bench.ps1 compare -Label baseline, spectre-off`.
 4. If there's no `gain` on avg or 1% low: `tune.ps1 undo -Id exp-spectre-*` and restart.
 5. Write the result into the "Bench result" column of `docs/TWEAKS.md` (in this repo) and run `tools\gen-tweaks-doc.ps1`.
+
+Keep the winners applied when you test the next group, so they add up. Re-take a baseline after keeping one.
+
+**Never** set priority or CPU affinity on VALORANT or the Riot Client (Task Manager, Process Lasso, registry tricks). It's reported to stop Vanguard, and MOS blocks it on purpose.
 
 `exp-vbs-on-*` is not a performance experiment. Only apply it if Riot starts requiring memory integrity, or if you want Vanguard's on-demand mode.
 

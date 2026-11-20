@@ -39,6 +39,13 @@
         'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa*'
     )
 
+    # Exact (Key, Name) values that may be written inside a protected key above. No wildcards (enforced).
+    # Protected value names below always win over these.
+    RegistryExceptions = @(
+        # Smart App Control state. Code integrity / driver signing itself stays untouched.
+        @{ Key = 'HKLM:\SYSTEM\CurrentControlSet\Control\CI\Policy'; Name = 'VerifiedAndReputablePolicyState' }
+    )
+
     # Value names that are protected wherever they appear (exploit protections: CFG, DEP, SEHOP, ASLR).
     RegistryValueNames = @('MitigationOptions', 'MitigationAuditOptions', 'DisableExceptionChainValidation', 'MoveImages', 'KernelSEHOPEnabled')
 

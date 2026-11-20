@@ -16,6 +16,7 @@
         @{ Id = 'power-usb-suspend-off'; Tier = 'standard'; Type = 'PowerSetting'; Scheme = 'MOS'; Subgroup = '2a737441-1930-4402-8d77-b2bebba308a3'; Setting = '48e6b7a6-50f5-4782-a5d4-53bb8f07e226'; Value = 0; Why = 'USB selective suspend off: mouse and keyboard ports never doze.' }
         @{ Id = 'power-pcie-aspm-off'; Tier = 'standard'; Type = 'PowerSetting'; Scheme = 'MOS'; Subgroup = '501a4d13-42af-4429-9fd1-a8218c268e20'; Setting = 'ee12f906-d277-404b-b6da-e5fa1a576df5'; Value = 0; Why = 'PCI Express link power management off (GPU, NIC).' }
 
+        @{ Id = 'boot-no-platform-clock'; Tier = 'standard'; Type = 'Bcd'; Target = 'useplatformclock'; Remove = $true; Why = 'Makes sure the timer is not forced onto HPET (a common "tweak" linked to stutter). Only removes the setting, never adds it.' }
         @{ Id = 'power-hibernation-off'; Tier = 'standard'; Type = 'Registry'; Target = 'HKLM:\SYSTEM\CurrentControlSet\Control\Power'; Name = 'HibernateEnabled'; Value = 0; ValueType = 'DWord'; Why = 'No hibernation file.' }
         @{ Id = 'power-fast-startup-off'; Tier = 'standard'; Type = 'Registry'; Target = 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power'; Name = 'HiberbootEnabled'; Value = 0; ValueType = 'DWord'; Why = 'Fast startup off: required for safe dual-booting (each OS sees the others'' drives fully shut down).' }
     )

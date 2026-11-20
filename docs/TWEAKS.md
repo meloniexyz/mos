@@ -7,7 +7,7 @@ Generated from `usb/MOS/tune/modules` by `tools/gen-tweaks-doc.ps1`. Do not edit
 - **Check** after Windows updates: `tune.ps1 check` lists what drifted.
 - Apps are removed for the MOS user only; undo re-registers them. OneDrive undo reinstalls it with the setup in Windows. The NVIDIA App cannot be restored by undo (reinstall from nvidia.com).
 
-151 tweaks: 142 standard, 9 experimental.
+158 tweaks: 144 standard, 14 experimental.
 
 ## apps
 
@@ -96,6 +96,7 @@ Generated from `usb/MOS/tune/modules` by `tools/gen-tweaks-doc.ps1`. Do not edit
 | `svc-messaging` | service `MessagingService` -> Disabled | SMS relay. |
 | `svc-sync-host` | service `OneSyncSvc` -> Disabled | Mail/contacts/calendar sync. |
 | `svc-net-usage` | service `Ndu` -> Disabled | Network data usage monitor driver counts every packet. |
+| `sac-off` | `HKLM:\SYSTEM\CurrentControlSet\Control\CI\Policy\VerifiedAndReputablePolicyState` = 0 | Smart App Control off (it checks every program and script launch, and once On it would block MOS's unsigned scripts). Driver signing and the rest of code integrity are untouched. Reboot needed. On Windows builds older than the 2026 servicing update, Windows may not let undo turn it back on. |
 | `policy-telemetry-min` | `HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection\AllowTelemetry` = 0 | Lowest diagnostic data level Pro allows. |
 | `policy-no-feedback` | `HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection\DoNotShowFeedbackNotifications` = 1 | No feedback pop-ups. |
 | `policy-wu-notify` | `HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU\AUOptions` = 2 | Windows Update asks before downloading, so it never starts during a match. Run it from Settings yourself. |
@@ -142,6 +143,7 @@ Generated from `usb/MOS/tune/modules` by `tools/gen-tweaks-doc.ps1`. Do not edit
 | `power-no-hibernate-timeout` | MOS plan setting `9d7815a6-7ee4-497e-8888-515a05f02364` = 0 | Never hibernate. |
 | `power-usb-suspend-off` | MOS plan setting `48e6b7a6-50f5-4782-a5d4-53bb8f07e226` = 0 | USB selective suspend off: mouse and keyboard ports never doze. |
 | `power-pcie-aspm-off` | MOS plan setting `ee12f906-d277-404b-b6da-e5fa1a576df5` = 0 | PCI Express link power management off (GPU, NIC). |
+| `boot-no-platform-clock` | boot `useplatformclock` =  | Makes sure the timer is not forced onto HPET (a common "tweak" linked to stutter). Only removes the setting, never adds it. |
 | `power-hibernation-off` | `HKLM:\SYSTEM\CurrentControlSet\Control\Power\HibernateEnabled` = 0 | No hibernation file. |
 | `power-fast-startup-off` | `HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power\HiberbootEnabled` = 0 | Fast startup off: required for safe dual-booting (each OS sees the others' drives fully shut down). |
 
@@ -202,6 +204,11 @@ Never applied by default. Apply a group by id, reboot, bench, and keep it only i
 | `exp-hags-off` | `HKLM:\SYSTEM\CurrentControlSet\Control\GraphicsDrivers\HwSchMode` = 1 | Hardware-accelerated GPU scheduling off (Windows 11 default is on). Results vary per game and driver. Reboot needed. | not tested yet |
 | `exp-timer-global` | `HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\kernel\GlobalTimerResolutionRequests` = 1 | Lets one process raise the timer resolution for the whole system (Windows 11 ignores it otherwise). Reboot needed. | not tested yet |
 | `exp-timer-task` | script `timer-task.ps1` | Logon task that holds a 0.5 ms timer resolution. Use together with exp-timer-global. | not tested yet |
+| `exp-mpo-off` | `HKLM:\SOFTWARE\Microsoft\Windows\Dwm\OverlayTestMode` = 5 | Multiplane overlay off. Fixes stutter/flicker on some NVIDIA setups; can hurt windowed flip mode, and some builds ignore it. Reboot needed. | not tested yet |
+| `exp-priority-separation` | `HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl\Win32PrioritySeparation` = 38 | Scheduler: short, variable time slices with the highest foreground boost (0x26; Windows default is 2). Effect is unproven; keep only on a measured gain. | not tested yet |
+| `exp-fso-off` | script `fso-valorant.ps1` | Fullscreen optimizations off for the VALORANT executable (AppCompat layer). Riot narrowed the windowed/fullscreen latency gap in 2025, so expect little. Skipped until the game is installed. | not tested yet |
+| `exp-gpu-irq-policy` | `PCI\VEN_10DE*` `DevicePolicy` = 4 | GPU interrupts go to one chosen processor (IrqPolicySpecifiedProcessors). Use with exp-gpu-irq-mask; bench with -WithCounters. Reboot needed. | not tested yet |
+| `exp-gpu-irq-mask` | `PCI\VEN_10DE*` `AssignmentSetOverride` = 4 0 0 0 0 0 0 0 | The chosen processor: logical CPU 2 (first thread of the second core), away from CPU 0 where most interrupts land. | not tested yet |
 | `exp-defender-quiet` | script `defender-quiet.ps1` | Defender stays on, but skips the Riot folders and keeps scans to idle time at low CPU. Opt-in: excluding folders lowers protection for them. | not tested yet |
 | `exp-vbs-on-vbs` | `HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\EnableVirtualizationBasedSecurity` = 1 | Only if Riot requires it, or for Vanguard on-demand mode: VBS on. | not tested yet |
 | `exp-vbs-on-hvci` | `HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity\Enabled` = 1 | Memory integrity on. | not tested yet |
