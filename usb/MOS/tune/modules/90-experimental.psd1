@@ -23,6 +23,10 @@
            SubKey = 'Device Parameters\Interrupt Management\Affinity Policy'; Name = 'AssignmentSetOverride'; Value = @(4, 0, 0, 0, 0, 0, 0, 0); ValueType = 'Binary'
            Why = 'The chosen processor: logical CPU 2 (first thread of the second core), away from CPU 0 where most interrupts land.' }
 
+        @{ Id = 'exp-sysmain-off'; Tier = 'experimental'; Type = 'Service'; Target = 'SysMain'; Value = 'Disabled'; Why = 'SysMain (Superfetch) off. Reports of stutter from it are anecdotal; on an SSD with spare RAM the loss is small. Keep only on a measured gain.' }
+        @{ Id = 'exp-memory-compression-off'; Tier = 'experimental'; Type = 'Script'; Script = 'memory-compression'; Why = 'Memory compression off (saves the CPU cost of compressing pages; only sensible with plenty of free RAM). Restart needed. Needs admin to read.' }
+        @{ Id = 'exp-windowed-optimizations'; Tier = 'experimental'; Type = 'Script'; Script = 'dx-global-setting'; Key = 'SwapEffectUpgradeEnable'; Value = '1'; Why = 'Optimizations for windowed games on (flip-model presentation for DX10/11 in windowed and borderless). Only matters if VALORANT runs windowed or borderless; can cause tearing.' }
+
         @{ Id = 'exp-defender-quiet'; Tier = 'experimental'; Type = 'Script'; Script = 'defender-quiet'; Why = 'Defender stays on, but skips the Riot folders and keeps scans to idle time at low CPU. Opt-in: excluding folders lowers protection for them.' }
 
         @{ Id = 'exp-vbs-on-vbs'; Tier = 'experimental'; Type = 'Registry'; Target = 'HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard'; Name = 'EnableVirtualizationBasedSecurity'; Value = 1; ValueType = 'DWord'; Why = 'Only if Riot requires it, or for Vanguard on-demand mode: VBS on.' }

@@ -7,7 +7,7 @@ Generated from `usb/MOS/tune/modules` by `tools/gen-tweaks-doc.ps1`. Do not edit
 - **Check** after Windows updates: `tune.ps1 check` lists what drifted.
 - Apps are removed for the MOS user only; undo re-registers them. OneDrive undo reinstalls it with the setup in Windows. The NVIDIA App cannot be restored by undo (reinstall from nvidia.com).
 
-158 tweaks: 144 standard, 14 experimental.
+166 tweaks: 149 standard, 17 experimental.
 
 ## apps
 
@@ -56,6 +56,8 @@ Generated from `usb/MOS/tune/modules` by `tools/gen-tweaks-doc.ps1`. Do not edit
 | `policy-no-copilot` | `HKCU:\Software\Policies\Microsoft\Windows\WindowsCopilot\TurnOffWindowsCopilot` = 1 | Turns off Windows Copilot. |
 | `policy-no-recall` | `HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsAI\DisableAIDataAnalysis` = 1 | Recall snapshots off. |
 | `feature-recall` | feature `Recall` -> Disabled | Recall component off (skipped where it does not exist). |
+| `policy-no-click-to-do` | `HKCU:\Software\Policies\Microsoft\Windows\WindowsAI\DisableClickToDo` = 1 | Click to Do (on-screen AI actions) off. |
+| `policy-no-spotlight` | `HKCU:\Software\Policies\Microsoft\Windows\CloudContent\DisableWindowsSpotlightFeatures` = 1 | Windows Spotlight off: no background downloads of lock-screen and desktop content. |
 | `policy-no-widgets` | `HKLM:\SOFTWARE\Policies\Microsoft\Dsh\AllowNewsAndInterests` = 0 | Widgets board off. |
 | `policy-no-consumer-apps` | `HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent\DisableWindowsConsumerFeatures` = 1 | Stops Windows from installing suggested apps. |
 | `no-silent-app-installs` | `HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager\SilentInstalledAppsEnabled` = 0 | No sponsored app installs. |
@@ -96,6 +98,7 @@ Generated from `usb/MOS/tune/modules` by `tools/gen-tweaks-doc.ps1`. Do not edit
 | `svc-messaging` | service `MessagingService` -> Disabled | SMS relay. |
 | `svc-sync-host` | service `OneSyncSvc` -> Disabled | Mail/contacts/calendar sync. |
 | `svc-net-usage` | service `Ndu` -> Disabled | Network data usage monitor driver counts every packet. |
+| `svc-ai-fabric` | service `WSAIFabricSvc` -> Disabled | Windows AI Fabric service (Recall / Click to Do / Live Captions backend on newer builds); users report constant CPU/NPU use and GBs of RAM. It may re-enable itself after updates: check shows that as drift. |
 | `sac-off` | `HKLM:\SYSTEM\CurrentControlSet\Control\CI\Policy\VerifiedAndReputablePolicyState` = 0 | Smart App Control off (it checks every program and script launch, and once On it would block MOS's unsigned scripts). Driver signing and the rest of code integrity are untouched. Reboot needed. On Windows builds older than the 2026 servicing update, Windows may not let undo turn it back on. |
 | `policy-telemetry-min` | `HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection\AllowTelemetry` = 0 | Lowest diagnostic data level Pro allows. |
 | `policy-no-feedback` | `HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection\DoNotShowFeedbackNotifications` = 1 | No feedback pop-ups. |
@@ -136,6 +139,8 @@ Generated from `usb/MOS/tune/modules` by `tools/gen-tweaks-doc.ps1`. Do not edit
 | `power-cpu-min` | MOS plan setting `893dee8e-2bef-41e0-89c6-b55d0929964c` = 100 | Minimum processor state 100%. |
 | `power-cpu-max` | MOS plan setting `bc5038f7-23e0-4960-96da-33abaf5935ec` = 100 | Maximum processor state 100%. |
 | `power-core-parking-off` | MOS plan setting `0cc5b647-c1df-4637-891a-dec35c318583` = 100 | Core parking minimum cores 100%: no core is parked. |
+| `power-epp-performance` | MOS plan setting `36687f9e-e3a5-4dbf-b1dc-15eb381c6863` = 0 | Processor energy-performance preference 0 (performance first) for CPUs with CPPC. High performance already uses 0; this keeps it if the plan had to be copied from Balanced. |
+| `power-boost-aggressive` | MOS plan setting `be337238-0d82-4146-a960-4f3749d470c7` = 2 | Processor boost mode Aggressive (same reason as above). |
 | `power-no-throttle-states` | MOS plan setting `3b04d4fd-1cc7-4f23-ab1c-d1337819c4bb` = 0 | Allow throttle states: off. |
 | `power-display-never-off` | MOS plan setting `3c0bc021-c8a8-4e07-a973-6b14cbcb2b7e` = 0 | Display never turns off. |
 | `power-disk-never-off` | MOS plan setting `6738e2c4-e8a5-4a42-b16a-e040e769756e` = 0 | Disks never spin down. |
@@ -209,6 +214,9 @@ Never applied by default. Apply a group by id, reboot, bench, and keep it only i
 | `exp-fso-off` | script `fso-valorant.ps1` | Fullscreen optimizations off for the VALORANT executable (AppCompat layer). Riot narrowed the windowed/fullscreen latency gap in 2025, so expect little. Skipped until the game is installed. | not tested yet |
 | `exp-gpu-irq-policy` | `PCI\VEN_10DE*` `DevicePolicy` = 4 | GPU interrupts go to one chosen processor (IrqPolicySpecifiedProcessors). Use with exp-gpu-irq-mask; bench with -WithCounters. Reboot needed. | not tested yet |
 | `exp-gpu-irq-mask` | `PCI\VEN_10DE*` `AssignmentSetOverride` = 4 0 0 0 0 0 0 0 | The chosen processor: logical CPU 2 (first thread of the second core), away from CPU 0 where most interrupts land. | not tested yet |
+| `exp-sysmain-off` | service `SysMain` -> Disabled | SysMain (Superfetch) off. Reports of stutter from it are anecdotal; on an SSD with spare RAM the loss is small. Keep only on a measured gain. | not tested yet |
+| `exp-memory-compression-off` | script `memory-compression.ps1` | Memory compression off (saves the CPU cost of compressing pages; only sensible with plenty of free RAM). Restart needed. Needs admin to read. | not tested yet |
+| `exp-windowed-optimizations` | script `dx-global-setting.ps1` | Optimizations for windowed games on (flip-model presentation for DX10/11 in windowed and borderless). Only matters if VALORANT runs windowed or borderless; can cause tearing. | not tested yet |
 | `exp-defender-quiet` | script `defender-quiet.ps1` | Defender stays on, but skips the Riot folders and keeps scans to idle time at low CPU. Opt-in: excluding folders lowers protection for them. | not tested yet |
 | `exp-vbs-on-vbs` | `HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\EnableVirtualizationBasedSecurity` = 1 | Only if Riot requires it, or for Vanguard on-demand mode: VBS on. | not tested yet |
 | `exp-vbs-on-hvci` | `HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity\Enabled` = 1 | Memory integrity on. | not tested yet |

@@ -41,6 +41,11 @@ function New-Shortcut([string]$Path, [string]$TargetPath, [string]$Arguments, [s
     $lnk.Save()
 }
 
+# "MOS check" shortcut: tuning drift first, then the doctor's health report. Both read-only.
+function Get-MosCheckArguments([string]$Root) {
+    '-NoExit -ExecutionPolicy Bypass -Command "& ''{0}'' check; & ''{1}''"' -f (Join-Path $Root 'tune\tune.ps1'), (Join-Path $Root 'doctor.ps1')
+}
+
 function Test-Elevated {
     ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
@@ -116,7 +121,7 @@ function Invoke-MosBootstrap {
     Log 'Auto-logon made permanent'
 
     New-Shortcut (Join-Path $DesktopPath 'Back to Windows.lnk') "$env:SystemRoot\System32\shutdown.exe" '/r /t 0' 'Restart into the daily Windows 10 (the boot default)'
-    New-Shortcut (Join-Path $DesktopPath 'MOS check.lnk') "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" ('-NoExit -ExecutionPolicy Bypass -File "{0}" check' -f (Join-Path $Destination 'tune\tune.ps1')) 'Read-only MOS tuning check'
+    New-Shortcut (Join-Path $DesktopPath 'MOS check.lnk') "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" (Get-MosCheckArguments $Destination) 'Read-only: tuning drift + doctor (RAM profile, refresh rate, background load...)'
     Log 'Desktop shortcuts created'
 
     if (-not $NoTune) {

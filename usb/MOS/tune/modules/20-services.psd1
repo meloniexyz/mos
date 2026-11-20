@@ -33,6 +33,7 @@
         @{ Id = 'svc-sync-host'; Tier = 'standard'; Type = 'Service'; Target = 'OneSyncSvc'; Value = 'Disabled'; Why = 'Mail/contacts/calendar sync.' }
         @{ Id = 'svc-net-usage'; Tier = 'standard'; Type = 'Service'; Target = 'Ndu'; Value = 'Disabled'; Why = 'Network data usage monitor driver counts every packet.' }
 
+        @{ Id = 'svc-ai-fabric'; Tier = 'standard'; Type = 'Service'; Target = 'WSAIFabricSvc'; Value = 'Disabled'; Why = 'Windows AI Fabric service (Recall / Click to Do / Live Captions backend on newer builds); users report constant CPU/NPU use and GBs of RAM. It may re-enable itself after updates: check shows that as drift.' }
         @{ Id = 'sac-off'; Tier = 'standard'; Type = 'Registry'; Target = 'HKLM:\SYSTEM\CurrentControlSet\Control\CI\Policy'; Name = 'VerifiedAndReputablePolicyState'; Value = 0; ValueType = 'DWord'; Why = 'Smart App Control off (it checks every program and script launch, and once On it would block MOS''s unsigned scripts). Driver signing and the rest of code integrity are untouched. Reboot needed. On Windows builds older than the 2026 servicing update, Windows may not let undo turn it back on.' }
 
         # policies: telemetry minimum, updates on your schedule, no peer-to-peer update sharing

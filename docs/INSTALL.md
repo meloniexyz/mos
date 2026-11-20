@@ -38,7 +38,13 @@ Menu names differ by board maker. The usual places (ASUS shown; MSI, Gigabyte an
    - Windows installs are signed and boot normally.
    - An unsigned OS won't boot with Secure Boot on. Turning Secure Boot off again brings it back, but MOS then fails the Vanguard check, so decide which matters more.
 
-Other BIOS settings (RAM profile, fan curves) are not affected.
+7. **Check the RAM profile is still on.** "Load optimized defaults" (and some board updates) turn XMP / DOCP / EXPO off, which silently costs a lot of fps in CPU-bound games. In the BIOS, set the memory profile again (ASUS: Ai Tweaker > Ai Overclock Tuner > D.O.C.P / XMP).
+   - Then, from Windows, run the doctor from this repo:
+
+     ```powershell
+     powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\Desktop\MOS\usb\MOS\doctor.ps1"
+     ```
+   - "RAM speed" must say PASS.
 
 ## 3. Make the USB stick
 
@@ -117,6 +123,9 @@ Then rename the new entry: `bcdedit /set {current} description "MOS"`.
    C:\MOS\vanguard-check.ps1
    ```
 8. **Restart once more.** Smart App Control's off switch (`sac-off`) takes effect after a reboot.
+9. **Run the doctor**, using the **MOS check** desktop shortcut (it runs the tuning check, then the doctor).
+   - Every item should be PASS, or INFO for driver age. Fix any WARN using its hint.
+   - It catches what silently costs fps: RAM profile off, monitor below its max refresh rate, GPU link narrowed, wrong power plan, MSI mode lost after a driver reinstall, restart pending, programs left running.
 
 ### Game and driver settings
 
@@ -144,6 +153,10 @@ These live outside Windows, so the tuner doesn't set them.
 - **Texture filtering quality:** High performance.
 - **Low Latency Mode:** leave it; Reflex in the game takes over.
 
+**Audio (Windows sound settings, per output device):**
+- Turn off **Audio enhancements** and **Spatial sound**, unless your headset needs virtual surround (then keep the one it needs).
+- Use **24-bit, 48000 Hz**. Higher sample rates only add audio-engine CPU work.
+
 **Frame cap test:** with Reflex On + Boost, compare **no cap** against **a cap slightly above your usual deathmatch fps**. Use the bench (step 8) and keep whichever gives better 1% lows. A steady cap often feels smoother than a higher, swinging average.
 
 ## 6. One-click switch from Windows 10
@@ -162,6 +175,7 @@ powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\Desktop\MOS\windows10
 | Situation | Command (admin terminal on MOS) |
 |---|---|
 | After a Windows update | `C:\MOS\tune\tune.ps1 check`, then `apply` if anything drifted |
+| fps feels lower than usual, or after any BIOS / driver change | **MOS check** shortcut, or `C:\MOS\doctor.ps1`: fix any WARN |
 | Undo one tweak / module / everything | `tune.ps1 undo -Id <id>` / `undo -Module <name>` / `undo` |
 | Preview without changing | `tune.ps1 apply -DryRun` |
 | Windows Update | Settings > Windows Update > Check for updates. MOS never downloads updates on its own (they would start during a match). |
@@ -207,6 +221,11 @@ Test the groups in this order. The first ones are the most likely to matter:
 | 6 | `exp-timer-*` | 0.5 ms timer resolution |
 | 7 | `exp-priority-separation` | stronger foreground scheduling boost |
 | 8 | `exp-fso-off` | fullscreen optimizations off for VALORANT |
+| 9 | `exp-sysmain-off` | SysMain (Superfetch) off |
+| 10 | `exp-memory-compression-off` | memory compression off (needs plenty of free RAM) |
+| 11 | `exp-windowed-optimizations` | flip-model presentation for windowed/borderless; only if you play windowed |
+
+Each benchmark run also saves a snapshot of the conditions: RAM speed, refresh rate, power plan, driver, applied experiments and pending restart. If two runs differ in any of those, `compare` warns that the results are **not comparable**. A RAM profile lost after a BIOS change would otherwise look like a tweak "loss".
 
 For each group:
 

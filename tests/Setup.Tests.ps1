@@ -107,6 +107,11 @@ Describe 'bootstrap.ps1 (6.3)' {
         (Get-Content (Join-Path $DesktopPath 'MOS setup NOT finished.txt') -Raw) | Should Match 'bootstrap\.ps1'
         Test-Path $Destination | Should Be $false
     }
+    It 'makes the MOS check shortcut run the tuning check and then the doctor' {
+        $a = Get-MosCheckArguments 'C:\MOS'
+        $a | Should Match "& 'C:\\MOS\\tune\\tune\.ps1' check; & 'C:\\MOS\\doctor\.ps1'"
+        $a | Should Match '-NoExit'
+    }
     It 'stops when it already finished' {
         $Destination = Join-Path $TestDrive 'done'
         New-Item -ItemType Directory $Destination -Force | Out-Null

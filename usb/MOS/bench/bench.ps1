@@ -23,6 +23,51 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 
+# The doctor's readers give the environment snapshot (one code path for "what state is this PC in").
+$script:BenchDoctor = Join-Path (Split-Path $PSScriptRoot -Parent) 'doctor.ps1'
+if (Test-Path -LiteralPath $script:BenchDoctor) { . $script:BenchDoctor }
+$script:BenchStatePath = Join-Path $env:SystemDrive 'MOS\state\state.json'
+
+function Get-BenchEnv {
+    function Try-Read([string]$Reader) { if (Get-Command $Reader -ErrorAction SilentlyContinue) { try { & $Reader } catch { $null } } else { $null } }
+    $ram = @(Try-Read 'Get-DocRam')
+    $display = Try-Read 'Get-DocDisplay'
+    $plan = Try-Read 'Get-DocPowerPlan'
+    $driver = Try-Read 'Get-DocDriverAge'
+    $pending = Try-Read 'Get-DocPendingReboot'
+    $exp = @()
+    if (Test-Path -LiteralPath $script:BenchStatePath) {
+        try {
+            $state = Get-Content -LiteralPath $script:BenchStatePath -Raw | ConvertFrom-Json
+            $exp = @($state.PSObject.Properties | Where-Object { $_.Value.tweak.Tier -eq 'experimental' } | ForEach-Object { $_.Name } | Sort-Object)
+        }
+        catch { }
+    }
+    [pscustomobject][ordered]@{
+        RamMts              = $(if ($ram.Count) { ($ram | Measure-Object Configured -Minimum).Minimum } else { $null })
+        RefreshHz           = $(if ($display) { $display.Current } else { $null })
+        PowerPlan           = $(if ($plan) { $plan.Guid } else { $null })
+        GpuDriver           = $(if ($driver) { $driver.Version } else { $null })
+        ExperimentalApplied = $exp
+        PendingRestart      = [bool]$pending
+    }
+}
+
+# Differences that make two runs not comparable (Critical) vs. expected ones (Info: the experiments under test).
+function Get-BenchEnvDiff($Ref, $Run) {
+    $out = [pscustomobject]@{ Missing = $false; Critical = @(); Info = @() }
+    if (-not $Ref -or -not $Run) { $out.Missing = $true; return $out }
+    $crit = @()
+    foreach ($f in 'RamMts', 'PowerPlan', 'GpuDriver', 'PendingRestart') {
+        if ("$($Ref.$f)" -ne "$($Run.$f)") { $crit += "$f $($Ref.$f) -> $($Run.$f)" }
+    }
+    if ($Ref.RefreshHz -and $Run.RefreshHz -and [math]::Abs([double]$Ref.RefreshHz - [double]$Run.RefreshHz) -gt 2) { $crit += "RefreshHz $($Ref.RefreshHz) -> $($Run.RefreshHz)" }
+    $a = @($Ref.ExperimentalApplied) -join ','; $b = @($Run.ExperimentalApplied) -join ','
+    $out.Critical = $crit
+    if ($a -ne $b) { $out.Info = @("experiments [$a] -> [$b]") }
+    $out
+}
+
 function Find-PresentMon([string]$Explicit) {
     if ($Explicit) { if (Test-Path -LiteralPath $Explicit) { return $Explicit } else { throw "PresentMon not found at $Explicit" } }
     $p = Get-ChildItem (Join-Path $PSScriptRoot 'tools') -Filter 'PresentMon*.exe' -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -First 1
@@ -120,11 +165,12 @@ function Get-FrameStats([double[]]$FrameTimes) {
     }
 }
 
-function Save-Summary([string]$CsvPath, [string]$RunLabel) {
+function Save-Summary([string]$CsvPath, [string]$RunLabel, $EnvSnapshot = $null) {
     $s = Get-FrameStats (Get-FrameTimes $CsvPath)
     $s | Add-Member Label $RunLabel
     $s | Add-Member Date (Get-Date -Format o)
     $s | Add-Member File (Split-Path $CsvPath -Leaf)
+    if ($EnvSnapshot) { $s | Add-Member Env $EnvSnapshot }
     $countersCsv = [IO.Path]::ChangeExtension($CsvPath, '.counters.csv')
     if (Test-Path -LiteralPath $countersCsv) {
         $c = Get-CounterStats $countersCsv
@@ -144,6 +190,14 @@ function Compare-Bench([object[]]$Summaries, [string[]]$Labels, [double]$MinNois
     $baseRuns = @($Summaries | Where-Object { $_.Label -eq $base })
     if (-not $baseRuns.Count) { throw "No runs labelled '$base'." }
     $ref = $baseRuns[-1]
+    foreach ($l in $Labels | Select-Object -Skip 1) {
+        $run = @($Summaries | Where-Object { $_.Label -eq $l }) | Select-Object -Last 1
+        if (-not $run) { continue }
+        $d = Get-BenchEnvDiff $(if ($ref.PSObject.Properties['Env']) { $ref.Env }) $(if ($run.PSObject.Properties['Env']) { $run.Env })
+        if ($d.Missing) { Write-Host "Note: '$base' or '$l' has no environment snapshot; can't check that conditions matched." -ForegroundColor DarkYellow }
+        elseif ($d.Critical.Count) { Write-Warning ("'$l' was recorded under different conditions than '$base' - results are NOT comparable: " + ($d.Critical -join '; ')) }
+        foreach ($i in $d.Info) { Write-Host "Info '$l': $i" -ForegroundColor DarkGray }
+    }
     # frame metrics: higher is better. counter metrics (only when both runs have them): lower is better.
     $metrics = @(@('AvgFps', $true), @('Low1', $true), @('Low01', $true), @('IntPctMed', $false), @('DpcPctMed', $false))
     foreach ($pair in $metrics) {
@@ -176,13 +230,15 @@ function Invoke-Bench {
             $csv = Join-Path $ResultsDir ("{0}-{1}.csv" -f (Get-Date -Format 'yyyyMMdd-HHmmss'), $Label[0])
             Write-Host "Waiting for $ProcessName (start a deathmatch)..."
             if (-not (Wait-ForProcess $ProcessName $WaitTimeout)) { throw "$ProcessName did not start within $WaitTimeout s." }
+            $envSnap = Get-BenchEnv
+            if ($envSnap.PendingRestart) { Write-Warning 'A restart is pending: some tweaks may not be active in this run.' }
             Write-Host "Recording $Seconds s. Keep playing."
             $sampler = $null
             if ($WithCounters) { $sampler = Start-CounterSampler ([IO.Path]::ChangeExtension($csv, '.counters.csv')) $CounterInterval }
             try { & $pm (New-PresentMonArgs $ProcessName $csv $Seconds) | Out-Null }
             finally { Stop-CounterSampler $sampler }
             if (-not (Test-Path -LiteralPath $csv)) { throw "PresentMon wrote no file (run as administrator?)." }
-            Save-Summary $csv $Label[0] | Format-List
+            Save-Summary $csv $Label[0] $envSnap | Format-List
         }
         'summary' {
             $all = Get-Summaries $ResultsDir
