@@ -1,0 +1,1 @@
+MOS install media marker. bootstrap.ps1 looks for this file to find the USB stick.

@@ -1,0 +1,7 @@
+# Benchmark captures belong to the machine, not the repo
+usb/MOS/results/
+# PresentMon binary is downloaded by the user (see docs/INSTALL.md)
+usb/MOS/bench/tools/*.exe
+# Runtime state and logs (only exist on MOS, listed in case they are copied back)
+usb/MOS/state/
+usb/MOS/logs/
