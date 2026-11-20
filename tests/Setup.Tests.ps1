@@ -71,6 +71,16 @@ Describe 'prep-usb.ps1 (6.2)' {
         { New-AnswerFileText 'x' 'Bad<Zone' '0409:00000409' } | Should Throw 'time zone'
         { New-AnswerFileText 'x' 'UTC' '<x>' } | Should Throw 'input locale'
     }
+    It 'recognizes setup media with a wim, esd or split swm image' {
+        foreach ($img in 'install.wim', 'install.esd', 'install.swm') {
+            $root = Join-Path $TestDrive "media-$img"
+            New-Item -ItemType Directory (Join-Path $root 'sources') -Force | Out-Null
+            Set-Content (Join-Path $root 'setup.exe') 'x'; Set-Content (Join-Path $root "sources\$img") 'x'
+            [bool](Test-SetupMedia $root) | Should Be $true
+        }
+        $bare = Join-Path $TestDrive 'media-none'; New-Item -ItemType Directory $bare -Force | Out-Null; Set-Content (Join-Path $bare 'setup.exe') 'x'
+        [bool](Test-SetupMedia $bare) | Should Be $false
+    }
     It 'refuses a folder that is not setup media' {
         $Target = Join-Path $TestDrive 'not-media'
         New-Item -ItemType Directory $Target | Out-Null

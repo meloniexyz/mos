@@ -47,7 +47,8 @@ function Get-BcdCurrentIdentifier([string[]]$BcdText) {
 }
 
 function Test-SetupMedia([string]$Root) {
-    (Test-Path (Join-Path $Root 'setup.exe')) -and ((Test-Path (Join-Path $Root 'sources\install.wim')) -or (Test-Path (Join-Path $Root 'sources\install.esd')))
+    # install.swm = split image: the Media Creation Tool splits it to fit FAT32's 4 GB file limit
+    (Test-Path (Join-Path $Root 'setup.exe')) -and (@('install.wim', 'install.esd', 'install.swm') | Where-Object { Test-Path (Join-Path $Root "sources\$_") })
 }
 
 function Find-SetupStick {
